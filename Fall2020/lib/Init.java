@@ -14,7 +14,7 @@ import java.util.Locale;
 
 public class Init extends LinearOpMode {
     public DcMotor motorLeftFront, motorRightFront, motorLeftBack, motorRightBack;
-    public List<DcMotor> chassisMotors;
+    public List<DcMotor> chassisMotors, leftMotors, rightMotors, frontMotors, backMotors;
     public IntegratingGyroscope gyroScope;
     public ModernRoboticsI2cGyro gyro;
     public PID pidGyro, pidLeftFront, pidRightFront, pidLeftBack, pidRightBack;
@@ -30,62 +30,61 @@ public class Init extends LinearOpMode {
         @Override double read() {return motor.getCurrentPosition();}
         @Override void end() {motor.setPower(0);}
     }
-    protected In2<DcMotor, Double> setPower = new In2<DcMotor, Double>() {
+    protected Hom2<DcMotor, Double, Unit> setPower = new In2<DcMotor, Double>() {
         @Override void run(DcMotor motor, Double x) {
             motor.setPower(x);
         }
     };
-    protected In2<DcMotor, Integer> setTarget = new In2<DcMotor, Integer>() {
+    protected Hom2<DcMotor, Integer, Unit> setTarget = new In2<DcMotor, Integer>() {
         @Override void run(DcMotor motor, Integer x) {
             motor.setTargetPosition(x);
         }
     };
-    private void setRotating(double power) {
-        motorLeftFront.setPower(-power);
-        motorRightFront.setPower(power);
-        motorLeftBack.setPower(-power);
-        motorRightBack.setPower(power);
-    }
-//    \p ->  (flip fmap chassisMotors) (flip setPower p)
-//    \p -> (flip fmap chassisMotors).(flip setPower) $ p
-//    (flip fmap chassisMotors).(flip setPower)
-//    (flip setPower)<&>(flip fmap chassisMotors)
-    protected Hom<Double,Unit> setDriving = new In<Double>() {
-        @Override void run(Double x) {
-            flip(setPower).of(x).fmap(chassisMotors);
+    protected Hom2<DcMotor, DcMotor.RunMode, Unit> setMode = new In2<DcMotor, DcMotor.RunMode>() {
+        @Override void run(DcMotor motor, DcMotor.RunMode mode) {
+            motor.setMode(mode);
         }
     };
-
+    protected Hom<Double, Unit> setRotating = new In<Double>() {
+        @Override void run(Double power) {
+            flip(setPower).of(-power).fmap(leftMotors);
+            flip(setPower).of(power).fmap(rightMotors);
+        }
+    };
+    protected Hom<Double,Unit> setDriving = new In<Double>() {
+        @Override void run(Double power) {
+            flip(setPower).of(power).fmap(chassisMotors);
+        }
+    };
     protected Hom<Integer, Unit> setTargets = new In<Integer>() {
         @Override void run(Integer encoder) {
             flip(setTarget).of(encoder).fmap(chassisMotors);
         }
     };
-    private void setMode(DcMotor.RunMode mode) {
-        motorLeftFront.setMode(mode);
-        motorLeftBack.setMode(mode);
-        motorRightFront.setMode(mode);
-        motorRightBack.setMode(mode);
-    }
+    protected Hom<DcMotor.RunMode, Unit> setModes = new In<DcMotor.RunMode>() {
+        @Override void run(DcMotor.RunMode mode) {
+            flip(setMode).of(mode).fmap(chassisMotors);
+        }
+    };
+    protected Hom<DcMotor, Boolean> isBusy = new Hom<DcMotor, Boolean>() {
+        @Override Boolean of(DcMotor motor) {
+            return motor.isBusy();
+        }
+    };
     private void stopAndReset() {
-        setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+        setModes.of(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         setDriving.of(0.);
     }
     public void driveFor(double power, int encoder) {
         stopAndReset();
         setTargets.of(encoder);
-        setMode(DcMotor.RunMode.RUN_TO_POSITION);
+        setModes.of(DcMotor.RunMode.RUN_TO_POSITION);
         setDriving.of(power);
         boolean[] flags = {false, false, false, false};
         Hom<DcMotor, String> encoderData = new Hom<DcMotor, String>(){@Override public String of(DcMotor mot) {
             return String.format(Locale.US, "%d%s", mot.getCurrentPosition(), mot.isBusy()?"...":"!");
         }};
-        while(opModeIsActive()) {
-            if(!motorLeftFront.isBusy()) flags[0] = true;
-            if(!motorRightFront.isBusy()) flags[1] = true;
-            if(!motorLeftBack.isBusy()) flags[2] = true;
-            if(!motorRightBack.isBusy()) flags[3] = true;
-            if(flags[0]&&flags[1]&&flags[2]&&flags[3]) break;
+        while(opModeIsActive() && joinl(conj, isBusy.fmap(chassisMotors))) {
             telemetry.addData("LF['\\]: ", encoderData.of(motorLeftFront));
             telemetry.addData("RF[/']: ", encoderData.of(motorRightFront));
             telemetry.addData("LB[./]: ", encoderData.of(motorLeftBack));
@@ -112,12 +111,16 @@ public class Init extends LinearOpMode {
         motorRightBack.setDirection(DcMotor.Direction.REVERSE);
         chassisMotors = new ArrayList<DcMotor>()
             {{add(motorLeftFront);add(motorRightFront);add(motorLeftBack);add(motorRightBack);}};
+        leftMotors = new ArrayList<DcMotor>() {{add(motorLeftFront);add(motorLeftBack);}};
+        rightMotors = new ArrayList<DcMotor>() {{add(motorRightFront);add(motorRightBack);}};
+        frontMotors = new ArrayList<DcMotor>() {{add(motorLeftFront);add(motorRightFront);}};
+        backMotors = new ArrayList<DcMotor>() {{add(motorLeftBack);add(motorRightBack);}};
     }
     private void initPID(){
         pidGyro = new CyclicPID(1.0, 1.0, 1.0, 1.0, -1.0, 1.0, -360, 359) {
-            @Override public void control(double output) {setRotating(output);}
+            @Override public void control(double output) {setRotating.of(output);}
             @Override public double read() {return gyro.getHeading();}
-            @Override public void end() {setRotating(0);}
+            @Override public void end() {setRotating.of(0.);}
         };
         pidLeftFront = new MotorPID(motorLeftFront, 1.0, 1.0, 1.0, 0.1, -1.0, 1.0);
         pidRightFront = new MotorPID(motorRightFront, 1.0, 1.0, 1.0, 0.1, -1.0, 1.0);
