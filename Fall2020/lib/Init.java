@@ -20,7 +20,7 @@ public class Init extends LinearOpMode {
     public PID pidGyro, pidLeftFront, pidRightFront, pidLeftBack, pidRightBack;
     public ElapsedTime runtime = new ElapsedTime();
     public ElapsedTime timer = new ElapsedTime();
-    class MotorPID extends BoundedPID {
+    private class MotorPID extends BoundedPID {
         private DcMotor motor;
         public MotorPID(DcMotor motor, double kP, double kI, double kD, double tolerance, double infOut, double supOut) {
             super(kP, kI, kD, tolerance, infOut, supOut);
@@ -50,11 +50,17 @@ public class Init extends LinearOpMode {
 //    \p -> (flip fmap chassisMotors).(flip setPower) $ p
 //    (flip fmap chassisMotors).(flip setPower)
 //    (flip setPower)<&>(flip fmap chassisMotors)
-    private Hom<Double,Unit> setDriving = flip(setPower).then(flip(fmap()).of(chassisMotors));
+    protected Hom<Double,Unit> setDriving = new In<Double>() {
+        @Override void run(Double x) {
+            flip(setPower).of(x).fmap(chassisMotors);
+        }
+    };
 
-    private void setTarget(int encoder) {
-        flip(setTarget).of(encoder).fmap(chassisMotors);
-    }
+    protected Hom<Integer, Unit> setTargets = new In<Integer>() {
+        @Override void run(Integer encoder) {
+            flip(setTarget).of(encoder).fmap(chassisMotors);
+        }
+    };
     private void setMode(DcMotor.RunMode mode) {
         motorLeftFront.setMode(mode);
         motorLeftBack.setMode(mode);
@@ -67,7 +73,7 @@ public class Init extends LinearOpMode {
     }
     public void driveFor(double power, int encoder) {
         stopAndReset();
-        setTarget(encoder);
+        setTargets.of(encoder);
         setMode(DcMotor.RunMode.RUN_TO_POSITION);
         setDriving.of(power);
         boolean[] flags = {false, false, false, false};

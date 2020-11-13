@@ -11,53 +11,53 @@ import java.util.Iterator;
 import java.util.List;
 import static java.lang.Math.*;
 
-interface Proxy extends Comparable<Proxy> {
-}
-class PureProxy implements Proxy{
-    public Class<?> content;
-    PureProxy(Class<?> content) {
-        this.content = content;
-    }
-    @Override
-    public boolean equals(Object proxy) {
-        return (proxy instanceof PureProxy) && (this.content == ((PureProxy) proxy).content);
-    }
-    // throws exception if argument proxy is not an PureProxy
-    // return 1 ~> this super arg
-    // return 0 ~> this == arg
-    // return -1 ~> this extends arg
-    @Override public int compareTo(Proxy proxy) throws AssertionError {
-        if (BuildConfig.DEBUG && !(proxy instanceof PureProxy))
-            throw new AssertionError("should be an instance of PureProxy");
-        return this.equals(proxy)?0:
-                this.content.isAssignableFrom((((PureProxy)proxy).content))?1:-1;
-    }
-}
-class HomProxy implements Proxy {
-    public Proxy in, out;
-    HomProxy(Proxy proxyIn, Proxy proxyOut) {
-        this.in = proxyIn;
-        this.out = proxyOut;
-    }
-    @Override
-    public boolean equals(Object proxy) {
-        return (proxy instanceof HomProxy)
-                && (this.in == ((HomProxy)proxy).in)
-                && (this.out == ((HomProxy)proxy).out);
-    }
-    @Override
-    public int compareTo(Proxy proxy) {
-        if (BuildConfig.DEBUG && !(proxy instanceof HomProxy))
-            throw new AssertionError("should be an instance of HomProxy");
-        if (BuildConfig.DEBUG && !((
-                this.in.compareTo(((HomProxy) proxy).in) *
-                this.out.compareTo(((HomProxy) proxy).out) < 0))) {
-            throw new AssertionError("one component should be covariant and another should be contravariant");
-        }
-        return this.equals(proxy)?0:
-                (this.out.compareTo(((HomProxy) proxy).out) > 0)?1:-1;
-    }
-}
+//interface Proxy extends Comparable<Proxy> {
+//}
+//class PureProxy implements Proxy{
+//    public Class<?> content;
+//    PureProxy(Class<?> content) {
+//        this.content = content;
+//    }
+//    @Override
+//    public boolean equals(Object proxy) {
+//        return (proxy instanceof PureProxy) && (this.content == ((PureProxy) proxy).content);
+//    }
+//    // throws exception if argument proxy is not an PureProxy
+//    // return 1 ~> this super arg
+//    // return 0 ~> this == arg
+//    // return -1 ~> this extends arg
+//    @Override public int compareTo(Proxy proxy) throws AssertionError {
+//        if (BuildConfig.DEBUG && !(proxy instanceof PureProxy))
+//            throw new AssertionError("should be an instance of PureProxy");
+//        return this.equals(proxy)?0:
+//                this.content.isAssignableFrom((((PureProxy)proxy).content))?1:-1;
+//    }
+//}
+//class HomProxy implements Proxy {
+//    public Proxy in, out;
+//    HomProxy(Proxy proxyIn, Proxy proxyOut) {
+//        this.in = proxyIn;
+//        this.out = proxyOut;
+//    }
+//    @Override
+//    public boolean equals(Object proxy) {
+//        return (proxy instanceof HomProxy)
+//                && (this.in == ((HomProxy)proxy).in)
+//                && (this.out == ((HomProxy)proxy).out);
+//    }
+//    @Override
+//    public int compareTo(Proxy proxy) {
+//        if (BuildConfig.DEBUG && !(proxy instanceof HomProxy))
+//            throw new AssertionError("should be an instance of HomProxy");
+//        if (BuildConfig.DEBUG && !((
+//                this.in.compareTo(((HomProxy) proxy).in) *
+//                this.out.compareTo(((HomProxy) proxy).out) < 0))) {
+//            throw new AssertionError("one component should be covariant and another should be contravariant");
+//        }
+//        return this.equals(proxy)?0:
+//                (this.out.compareTo(((HomProxy) proxy).out) > 0)?1:-1;
+//    }
+//}
 public class Category {
     public static class Unit {
         final public static Unit unit = new Unit();
@@ -67,21 +67,8 @@ public class Category {
     public static <A> Class<A> assume(Class<?> aClass) {
         return (Class<A>)aClass;
     }
-    public static Proxy proxy(Class<?> content) {
-        return new PureProxy(content);
-    }
-    public static Proxy proxy(Class<?> contentIn, Class<?> contentOut) {
-        return new HomProxy(new PureProxy(contentIn), new PureProxy(contentOut));
-    }
-    public static Proxy proxy(Proxy proxyIn, Proxy proxyOut) {
-        return new HomProxy(proxyIn, proxyOut);
-    }
     // morphism bifunctor
     public static abstract class Hom<A,B> implements Function<A, B> {
-        public Proxy proxy;
-        public Hom(Proxy proxyIn, Proxy proxyOut) {
-            this.proxy = proxy(proxyIn, proxyOut);
-        }
         abstract B of(A x);
         @Deprecated @Override final public B apply(A arg) {
             return of(arg);
@@ -94,7 +81,7 @@ public class Category {
             }};
         }
         public <T> Hom<T,B> after(final Hom<T,A> g) {
-            return new Hom<T,B>(proxy((g.proxy).in, Hom.this.proxy.out)) {@Override B of(T x){
+            return new Hom<T,B>() {@Override B of(T x){
                 return Hom.this.of(g.of(x));
             }};
         }
@@ -103,12 +90,6 @@ public class Category {
         }
     }
     public static abstract class Eff extends Hom<Unit,Unit> implements Runnable {
-        public Eff(Class<Unit> typeIn, Class<Unit> typeOut) {
-            super(typeIn, typeOut);
-        }
-        public Eff() {
-            super(Unit.class, Unit.class);
-        }
         @Override
         Unit of(Unit unit) {
             run();
@@ -116,12 +97,6 @@ public class Category {
         }
     }
     public static abstract class In<A> extends Hom<A,Unit> implements Consumer<A> {
-        public In(Class<A> typeIn, Class<Unit> typeOut) {
-            super(typeIn, typeOut);
-        }
-        public In(Class<A> typeIn) {
-            super(typeIn, Unit.class);
-        }
         abstract void run(A x);
         @Override
         Unit of(A x) {
@@ -139,9 +114,6 @@ public class Category {
         }
     }
     public static abstract class In2<A,B> extends Hom2<A,B,Unit> {
-        public In2(Class<A> typeIn, Class<Hom<B, Unit>> typeOut) {
-            super(typeIn, typeOut);
-        }
         abstract void run(A x, B y);
         @Override
         Unit of(A x, B y) {
@@ -149,24 +121,12 @@ public class Category {
         }
     }
     public static abstract class Out<A> extends Hom<Unit,A> implements Supplier<A>, Func<A> {
-        public Out(Class<Unit> typeIn, Class<A> typeOut) {
-            super(typeIn, typeOut);
-        }
-        public Out(Class<A> typeOut) {
-            super(Unit.class, typeOut);
-        }
         abstract A of();
         @Deprecated @Override A of(Unit x) {return of();}
         @Deprecated @Override public A get() {return of();}
         @Deprecated @Override public A value() {return of();}
     }
     public static abstract class Hom2<A,B,C> extends Hom<A,Hom<B,C>> {
-        public Hom2(Class<A> typeIn, Class<Hom<B,C>> typeOut) {
-            super(typeIn, typeOut);
-        }
-        public Hom2(Class<A> typeIn1, Class<B> typeIn2, Class<C> typeOut) {
-            super(typeIn1, Category.<Hom<B,C>>assume(Hom.class));
-        }
         abstract C of(A x, B y);
         public Hom<B,C> of(final A x) {
             return new Hom<B,C>() {@Override C of(final B y) {
