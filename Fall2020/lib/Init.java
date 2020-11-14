@@ -71,10 +71,16 @@ public class Init extends LinearOpMode {
             return motor.isBusy();
         }
     };
-    private void stopAndReset() {
+    protected void stopAndReset() {
         setModes.of(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         setDriving.of(0.);
     }
+    protected Hom<Unit, Unit> stopAndReset = new Eff() {
+        @Override public void run() {
+            setModes.of(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
+            setDriving.of(0.);
+        }
+    };
     public void driveFor(double power, int encoder) {
         stopAndReset();
         setTargets.of(encoder);
